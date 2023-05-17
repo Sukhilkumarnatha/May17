@@ -1,0 +1,3384 @@
+---
+# Source: project/templates/rm-logs-jobs.yaml
+  
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: release-name-rm-logs-jobs
+spec:
+  schedule: "0 0 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          volumes:
+            - name: logs
+              persistentVolumeClaim:
+                claimName: release-name-pvc
+            - name: old-logs
+              persistentVolumeClaim:
+                claimName: release-name-pvc-rm-logs
+          containers:
+            - name: rm-jobs
+              image: provistacorp/rm-logs:v6
+              env:
+                - name: MaxAgeOnDays
+                  value: "15"
+              volumeMounts:
+                - name: logs
+                  mountPath: /tmp_logs
+                - name: old-logs
+                  mountPath: /old_logs
+          restartPolicy: Never
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  annotations:
+    pv.kubernetes.io/provisioned-by: blob.csi.azure.com
+  name: release-name-pv-default-rm-logs
+spec:
+  capacity:
+    storage: 300Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain  # If set as "Delete" container would be removed after pvc deletion
+  storageClassName: azureblob-fuse-premium
+  mountOptions:
+    - -o allow_other
+    - --file-cache-timeout-in-seconds=120
+  csi:
+    driver: blob.csi.azure.com
+    readOnly: false
+    volumeHandle: release-name-pv-default-rm-logs-id
+    volumeAttributes:
+      containerName: qalogs
+    nodeStageSecretRef:
+      name: release-name-logs-secret
+      namespace: default
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: release-name-pvc-rm-logs
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 300Gi
+  volumeName: release-name-pv-default-rm-logs
+  storageClassName: azureblob-fuse-premium
+---
+# Source: project/templates/backend.yaml
+
+  
+  
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: release-name-election
+spec:
+  maxReplicas: 4
+  minReplicas: 1
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: release-name-election
+  metrics:
+      - type: Resource
+        resource:
+          name: memory
+          target:
+            type: Utilization
+            averageUtilization: 95
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:
+    release-name-election
+  labels:
+    app:
+      release-name-election
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app:
+        release-name-election
+  template:
+    metadata:
+      labels:
+        app:
+          release-name-election
+    spec:
+      
+
+      volumes:
+        - name: logs
+          persistentVolumeClaim:
+            claimName: release-name-pvc
+
+          
+          
+      nodeSelector:
+        kubernetes.io/os: linux
+        app: microservices
+      
+      containers:
+        - name:
+            release-name-election
+          volumeMounts:
+              - name: logs
+                mountPath: /tmp_logs
+
+
+                
+                
+          image: viberegistry.azurecr.io/ems.election:22268
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          liveness:
+            path: /hc
+            initialDelaySeconds: 10
+            failureThreshold: 3
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+        readiness:
+          path: /hc
+          initialDelaySeconds: 10
+          failureThreshold: 1
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 10
+          startup:
+            path: /hc
+            initialDelaySeconds: 40
+            failureThreshold: 20
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+
+          env:
+            - name: elastic__password
+              valueFrom:
+                secretKeyRef:
+                  key: elastic
+                  name: elk-elasticsearch-es-elastic-user
+            - name: ElasticApm__SecretToken
+              valueFrom:
+                secretKeyRef:
+                  key: secret-token
+                  name: elk-apm-server-apm-token
+            - name: elastic__username
+              value: elastic
+            - name: elastic__uri
+              value: http://elk-elasticsearch-es-http.elk.svc:9200
+            - name: ElasticApm__ServerUrls
+              value: http://elk-apm-server-apm-http.elk.svc:8200
+
+            
+
+            
+            
+            
+  
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: release-name-engine-rule
+spec:
+  maxReplicas: 4
+  minReplicas: 1
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: release-name-engine-rule
+  metrics:
+      - type: Resource
+        resource:
+          name: memory
+          target:
+            type: Utilization
+            averageUtilization: 95
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:
+    release-name-engine-rule
+  labels:
+    app:
+      release-name-engine-rule
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app:
+        release-name-engine-rule
+  template:
+    metadata:
+      labels:
+        app:
+          release-name-engine-rule
+    spec:
+      
+
+      volumes:
+        - name: logs
+          persistentVolumeClaim:
+            claimName: release-name-pvc
+
+          
+          
+      nodeSelector:
+        kubernetes.io/os: linux
+        app: microservices
+      
+      containers:
+        - name:
+            release-name-engine-rule
+          volumeMounts:
+              - name: logs
+                mountPath: /tmp_logs
+
+
+                
+                
+          image: viberegistry.azurecr.io/ems.enginerule:22269
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          liveness:
+            path: /hc
+            initialDelaySeconds: 10
+            failureThreshold: 3
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+        readiness:
+          path: /hc
+          initialDelaySeconds: 10
+          failureThreshold: 1
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 10
+          startup:
+            path: /hc
+            initialDelaySeconds: 30
+            failureThreshold: 20
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+
+          env:
+            - name: elastic__password
+              valueFrom:
+                secretKeyRef:
+                  key: elastic
+                  name: elk-elasticsearch-es-elastic-user
+            - name: ElasticApm__SecretToken
+              valueFrom:
+                secretKeyRef:
+                  key: secret-token
+                  name: elk-apm-server-apm-token
+            - name: elastic__username
+              value: elastic
+            - name: elastic__uri
+              value: http://elk-elasticsearch-es-http.elk.svc:9200
+            - name: ElasticApm__ServerUrls
+              value: http://elk-apm-server-apm-http.elk.svc:8200
+
+            
+
+            
+            
+            
+  
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: release-name-geo-data
+spec:
+  maxReplicas: 4
+  minReplicas: 1
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: release-name-geo-data
+  metrics:
+      - type: Resource
+        resource:
+          name: memory
+          target:
+            type: Utilization
+            averageUtilization: 95
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:
+    release-name-geo-data
+  labels:
+    app:
+      release-name-geo-data
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app:
+        release-name-geo-data
+  template:
+    metadata:
+      labels:
+        app:
+          release-name-geo-data
+    spec:
+      
+
+      volumes:
+        - name: logs
+          persistentVolumeClaim:
+            claimName: release-name-pvc
+
+          
+          
+      nodeSelector:
+        kubernetes.io/os: linux
+        app: microservices
+      
+      containers:
+        - name:
+            release-name-geo-data
+          volumeMounts:
+              - name: logs
+                mountPath: /tmp_logs
+
+
+                
+                
+          image: viberegistry.azurecr.io/ems.geodata:22270
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          liveness:
+            path: /hc
+            initialDelaySeconds: 10
+            failureThreshold: 3
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+        readiness:
+          path: /hc
+          initialDelaySeconds: 10
+          failureThreshold: 1
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 10
+          startup:
+            path: /hc
+            initialDelaySeconds: 30
+            failureThreshold: 20
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+
+          env:
+            - name: elastic__password
+              valueFrom:
+                secretKeyRef:
+                  key: elastic
+                  name: elk-elasticsearch-es-elastic-user
+            - name: ElasticApm__SecretToken
+              valueFrom:
+                secretKeyRef:
+                  key: secret-token
+                  name: elk-apm-server-apm-token
+            - name: elastic__username
+              value: elastic
+            - name: elastic__uri
+              value: http://elk-elasticsearch-es-http.elk.svc:9200
+            - name: ElasticApm__ServerUrls
+              value: http://elk-apm-server-apm-http.elk.svc:8200
+
+            
+
+            
+            
+            
+  
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: release-name-identity
+spec:
+  maxReplicas: 4
+  minReplicas: 1
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: release-name-identity
+  metrics:
+      - type: Resource
+        resource:
+          name: memory
+          target:
+            type: Utilization
+            averageUtilization: 95
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:
+    release-name-identity
+  labels:
+    app:
+      release-name-identity
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app:
+        release-name-identity
+  template:
+    metadata:
+      labels:
+        app:
+          release-name-identity
+    spec:
+      
+
+      volumes:
+        - name: logs
+          persistentVolumeClaim:
+            claimName: release-name-pvc
+
+          
+          
+      nodeSelector:
+        kubernetes.io/os: linux
+        app: microservices
+      
+      containers:
+        - name:
+            release-name-identity
+          volumeMounts:
+              - name: logs
+                mountPath: /tmp_logs
+
+
+                
+                
+          image: viberegistry.azurecr.io/ems.identity:22271
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          liveness:
+            path: /hc
+            initialDelaySeconds: 10
+            failureThreshold: 3
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+        readiness:
+          path: /hc
+          initialDelaySeconds: 10
+          failureThreshold: 1
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 10
+          startup:
+            path: /hc
+            initialDelaySeconds: 30
+            failureThreshold: 20
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+
+          env:
+            - name: elastic__password
+              valueFrom:
+                secretKeyRef:
+                  key: elastic
+                  name: elk-elasticsearch-es-elastic-user
+            - name: ElasticApm__SecretToken
+              valueFrom:
+                secretKeyRef:
+                  key: secret-token
+                  name: elk-apm-server-apm-token
+            - name: elastic__username
+              value: elastic
+            - name: elastic__uri
+              value: http://elk-elasticsearch-es-http.elk.svc:9200
+            - name: ElasticApm__ServerUrls
+              value: http://elk-apm-server-apm-http.elk.svc:8200
+
+            
+            - name: APIBaseUrl
+              value: "https://alamedacounty.vibe-ems.app/"
+            
+            - name: AppSettings__AdEnvironment
+              value: "DEV"
+            
+            - name: AppSettings__RedirectUrl
+              value: "https://alamedacounty.vibe-ems.app/"
+            
+            - name: RedirectUrl
+              value: "https://alamedacounty.vibe-ems.app/"
+            
+
+            
+            
+            
+  
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: release-name-integration-services
+spec:
+  maxReplicas: 4
+  minReplicas: 1
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: release-name-integration-services
+  metrics:
+      - type: Resource
+        resource:
+          name: memory
+          target:
+            type: Utilization
+            averageUtilization: 95
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:
+    release-name-integration-services
+  labels:
+    app:
+      release-name-integration-services
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app:
+        release-name-integration-services
+  template:
+    metadata:
+      labels:
+        app:
+          release-name-integration-services
+    spec:
+      
+
+      volumes:
+        - name: logs
+          persistentVolumeClaim:
+            claimName: release-name-pvc
+
+          
+          
+      nodeSelector:
+        kubernetes.io/os: window
+        app: microservices
+      
+      containers:
+        - name:
+            release-name-integration-services
+          volumeMounts:
+              - name: logs
+                mountPath: /tmp_logs
+
+
+                
+                
+          image: viberegistry.azurecr.io/ems.integrationservices:22272
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          liveness:
+            path: /hc
+            initialDelaySeconds: 10
+            failureThreshold: 3
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+        readiness:
+          path: /hc
+          initialDelaySeconds: 10
+          failureThreshold: 1
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 10
+          startup:
+            path: /hc
+            initialDelaySeconds: 30
+            failureThreshold: 20
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+
+          env:
+            - name: elastic__password
+              valueFrom:
+                secretKeyRef:
+                  key: elastic
+                  name: elk-elasticsearch-es-elastic-user
+            - name: ElasticApm__SecretToken
+              valueFrom:
+                secretKeyRef:
+                  key: secret-token
+                  name: elk-apm-server-apm-token
+            - name: elastic__username
+              value: elastic
+            - name: elastic__uri
+              value: http://elk-elasticsearch-es-http.elk.svc:9200
+            - name: ElasticApm__ServerUrls
+              value: http://elk-apm-server-apm-http.elk.svc:8200
+
+            
+            - name: ASPNETCORE_ENVIRONMENT
+              value: "Custom"
+            
+            - name: ASPNETCORE_URLS
+              value: "http://+:80"
+            
+            - name: AppSettings__AdEnvironment
+              value: "DEV"
+            
+            - name: AppSettings__Implementation
+              value: "h"
+            
+            - name: AppSettings__ipVoteca
+              value: "https://172.26.3.5:4447/VoteCalIntgSvc/VoterSearchIntgSvc.svc"
+            
+            - name: AppSettings__isPreHashDataRequired
+              value: "false"
+            
+
+            
+            
+            
+  
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: release-name-job-manager
+spec:
+  maxReplicas: 4
+  minReplicas: 1
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: release-name-job-manager
+  metrics:
+      - type: Resource
+        resource:
+          name: memory
+          target:
+            type: Utilization
+            averageUtilization: 95
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:
+    release-name-job-manager
+  labels:
+    app:
+      release-name-job-manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app:
+        release-name-job-manager
+  template:
+    metadata:
+      labels:
+        app:
+          release-name-job-manager
+    spec:
+      
+
+      volumes:
+        - name: logs
+          persistentVolumeClaim:
+            claimName: release-name-pvc
+
+          
+          
+      nodeSelector:
+        kubernetes.io/os: linux
+        app: microservices
+      
+      containers:
+        - name:
+            release-name-job-manager
+          volumeMounts:
+              - name: logs
+                mountPath: /tmp_logs
+
+
+                
+                
+          image: viberegistry.azurecr.io/ems.jobsmanager:22281
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          liveness:
+            path: /hc
+            initialDelaySeconds: 10
+            failureThreshold: 3
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+        readiness:
+          path: /hc
+          initialDelaySeconds: 10
+          failureThreshold: 1
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 10
+          startup:
+            path: /hc
+            initialDelaySeconds: 30
+            failureThreshold: 20
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+
+          env:
+            - name: elastic__password
+              valueFrom:
+                secretKeyRef:
+                  key: elastic
+                  name: elk-elasticsearch-es-elastic-user
+            - name: ElasticApm__SecretToken
+              valueFrom:
+                secretKeyRef:
+                  key: secret-token
+                  name: elk-apm-server-apm-token
+            - name: elastic__username
+              value: elastic
+            - name: elastic__uri
+              value: http://elk-elasticsearch-es-http.elk.svc:9200
+            - name: ElasticApm__ServerUrls
+              value: http://elk-apm-server-apm-http.elk.svc:8200
+
+            
+
+            
+            
+            
+  
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: release-name-list-maintenance
+spec:
+  maxReplicas: 4
+  minReplicas: 1
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: release-name-list-maintenance
+  metrics:
+      - type: Resource
+        resource:
+          name: memory
+          target:
+            type: Utilization
+            averageUtilization: 95
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:
+    release-name-list-maintenance
+  labels:
+    app:
+      release-name-list-maintenance
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app:
+        release-name-list-maintenance
+  template:
+    metadata:
+      labels:
+        app:
+          release-name-list-maintenance
+    spec:
+      
+
+      volumes:
+        - name: logs
+          persistentVolumeClaim:
+            claimName: release-name-pvc
+
+          
+          
+      nodeSelector:
+        kubernetes.io/os: linux
+        app: microservices
+      
+      containers:
+        - name:
+            release-name-list-maintenance
+          volumeMounts:
+              - name: logs
+                mountPath: /tmp_logs
+
+
+                
+                
+          image: viberegistry.azurecr.io/ems.listmaintenance:22273
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          liveness:
+            path: /hc
+            initialDelaySeconds: 10
+            failureThreshold: 3
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+        readiness:
+          path: /hc
+          initialDelaySeconds: 10
+          failureThreshold: 1
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 10
+          startup:
+            path: /hc
+            initialDelaySeconds: 30
+            failureThreshold: 20
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+
+          env:
+            - name: elastic__password
+              valueFrom:
+                secretKeyRef:
+                  key: elastic
+                  name: elk-elasticsearch-es-elastic-user
+            - name: ElasticApm__SecretToken
+              valueFrom:
+                secretKeyRef:
+                  key: secret-token
+                  name: elk-apm-server-apm-token
+            - name: elastic__username
+              value: elastic
+            - name: elastic__uri
+              value: http://elk-elasticsearch-es-http.elk.svc:9200
+            - name: ElasticApm__ServerUrls
+              value: http://elk-apm-server-apm-http.elk.svc:8200
+
+            
+
+            
+            
+            
+  
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: release-name-location
+spec:
+  maxReplicas: 4
+  minReplicas: 1
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: release-name-location
+  metrics:
+      - type: Resource
+        resource:
+          name: memory
+          target:
+            type: Utilization
+            averageUtilization: 95
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:
+    release-name-location
+  labels:
+    app:
+      release-name-location
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app:
+        release-name-location
+  template:
+    metadata:
+      labels:
+        app:
+          release-name-location
+    spec:
+      
+
+      volumes:
+        - name: logs
+          persistentVolumeClaim:
+            claimName: release-name-pvc
+
+          
+          
+      nodeSelector:
+        kubernetes.io/os: linux
+        app: microservices
+      
+      containers:
+        - name:
+            release-name-location
+          volumeMounts:
+              - name: logs
+                mountPath: /tmp_logs
+
+
+                
+                
+          image: viberegistry.azurecr.io/ems.location:22278
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          liveness:
+            path: /hc
+            initialDelaySeconds: 10
+            failureThreshold: 3
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+        readiness:
+          path: /hc
+          initialDelaySeconds: 10
+          failureThreshold: 1
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 10
+          startup:
+            path: /hc
+            initialDelaySeconds: 30
+            failureThreshold: 20
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+
+          env:
+            - name: elastic__password
+              valueFrom:
+                secretKeyRef:
+                  key: elastic
+                  name: elk-elasticsearch-es-elastic-user
+            - name: ElasticApm__SecretToken
+              valueFrom:
+                secretKeyRef:
+                  key: secret-token
+                  name: elk-apm-server-apm-token
+            - name: elastic__username
+              value: elastic
+            - name: elastic__uri
+              value: http://elk-elasticsearch-es-http.elk.svc:9200
+            - name: ElasticApm__ServerUrls
+              value: http://elk-apm-server-apm-http.elk.svc:8200
+
+            
+
+            
+            
+            
+  
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: release-name-mailing
+spec:
+  maxReplicas: 4
+  minReplicas: 1
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: release-name-mailing
+  metrics:
+      - type: Resource
+        resource:
+          name: memory
+          target:
+            type: Utilization
+            averageUtilization: 95
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:
+    release-name-mailing
+  labels:
+    app:
+      release-name-mailing
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app:
+        release-name-mailing
+  template:
+    metadata:
+      labels:
+        app:
+          release-name-mailing
+    spec:
+      
+
+      volumes:
+        - name: logs
+          persistentVolumeClaim:
+            claimName: release-name-pvc
+
+          
+          
+          
+          - name: files
+            azureDisk:
+              kind: Managed
+              diskName: MailingDisk
+              diskURI: /subscriptions/f12fcbf5-7402-46b5-b153-5c52c1dfd787/resourceGroups/MC_E_group_EMS_westus/providers/Microsoft.Compute/disks/MailingDisk
+
+          
+      
+      nodeSelector:
+        kubernetes.io/os: linux
+        app: microservices
+      
+      containers:
+        - name:
+            release-name-mailing
+          volumeMounts:
+              - name: logs
+                mountPath: /tmp_logs
+
+
+                
+                
+                - mountPath: /app/wwwroot
+                  name: files
+
+
+          
+          image: viberegistry.azurecr.io/ems.mailing:22279
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          liveness:
+            path: /hc
+            initialDelaySeconds: 10
+            failureThreshold: 3
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+        readiness:
+          path: /hc
+          initialDelaySeconds: 10
+          failureThreshold: 1
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 10
+          startup:
+            path: /hc
+            initialDelaySeconds: 30
+            failureThreshold: 20
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+
+          env:
+            - name: elastic__password
+              valueFrom:
+                secretKeyRef:
+                  key: elastic
+                  name: elk-elasticsearch-es-elastic-user
+            - name: ElasticApm__SecretToken
+              valueFrom:
+                secretKeyRef:
+                  key: secret-token
+                  name: elk-apm-server-apm-token
+            - name: elastic__username
+              value: elastic
+            - name: elastic__uri
+              value: http://elk-elasticsearch-es-http.elk.svc:9200
+            - name: ElasticApm__ServerUrls
+              value: http://elk-apm-server-apm-http.elk.svc:8200
+
+            
+            - name: AppSettings__RedirectPort
+              value: "https"
+            
+            - name: AppSettings__RedirectUrl
+              value: "vibe-ems.app/"
+            
+
+            
+            
+            
+  
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: release-name-notifications
+spec:
+  maxReplicas: 4
+  minReplicas: 1
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: release-name-notifications
+  metrics:
+      - type: Resource
+        resource:
+          name: memory
+          target:
+            type: Utilization
+            averageUtilization: 95
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:
+    release-name-notifications
+  labels:
+    app:
+      release-name-notifications
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app:
+        release-name-notifications
+  template:
+    metadata:
+      labels:
+        app:
+          release-name-notifications
+    spec:
+      
+
+      volumes:
+        - name: logs
+          persistentVolumeClaim:
+            claimName: release-name-pvc
+
+          
+          
+      nodeSelector:
+        kubernetes.io/os: linux
+        app: microservices
+      
+      containers:
+        - name:
+            release-name-notifications
+          volumeMounts:
+              - name: logs
+                mountPath: /tmp_logs
+
+
+                
+                
+          image: viberegistry.azurecr.io/ems.notifications:22282
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          liveness:
+            path: /hc
+            initialDelaySeconds: 10
+            failureThreshold: 3
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+        readiness:
+          path: /hc
+          initialDelaySeconds: 10
+          failureThreshold: 1
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 10
+          startup:
+            path: /hc
+            initialDelaySeconds: 30
+            failureThreshold: 20
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+
+          env:
+            - name: elastic__password
+              valueFrom:
+                secretKeyRef:
+                  key: elastic
+                  name: elk-elasticsearch-es-elastic-user
+            - name: ElasticApm__SecretToken
+              valueFrom:
+                secretKeyRef:
+                  key: secret-token
+                  name: elk-apm-server-apm-token
+            - name: elastic__username
+              value: elastic
+            - name: elastic__uri
+              value: http://elk-elasticsearch-es-http.elk.svc:9200
+            - name: ElasticApm__ServerUrls
+              value: http://elk-apm-server-apm-http.elk.svc:8200
+
+            
+
+            
+            
+            
+  
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: release-name-petition
+spec:
+  maxReplicas: 4
+  minReplicas: 1
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: release-name-petition
+  metrics:
+      - type: Resource
+        resource:
+          name: memory
+          target:
+            type: Utilization
+            averageUtilization: 95
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:
+    release-name-petition
+  labels:
+    app:
+      release-name-petition
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app:
+        release-name-petition
+  template:
+    metadata:
+      labels:
+        app:
+          release-name-petition
+    spec:
+      
+
+      volumes:
+        - name: logs
+          persistentVolumeClaim:
+            claimName: release-name-pvc
+
+          
+          
+      nodeSelector:
+        kubernetes.io/os: linux
+        app: microservices
+      
+      containers:
+        - name:
+            release-name-petition
+          volumeMounts:
+              - name: logs
+                mountPath: /tmp_logs
+
+
+                
+                
+          image: viberegistry.azurecr.io/ems.petition:22284
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          liveness:
+            path: /hc
+            initialDelaySeconds: 10
+            failureThreshold: 3
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+        readiness:
+          path: /hc
+          initialDelaySeconds: 10
+          failureThreshold: 1
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 10
+          startup:
+            path: /hc
+            initialDelaySeconds: 30
+            failureThreshold: 20
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+
+          env:
+            - name: elastic__password
+              valueFrom:
+                secretKeyRef:
+                  key: elastic
+                  name: elk-elasticsearch-es-elastic-user
+            - name: ElasticApm__SecretToken
+              valueFrom:
+                secretKeyRef:
+                  key: secret-token
+                  name: elk-apm-server-apm-token
+            - name: elastic__username
+              value: elastic
+            - name: elastic__uri
+              value: http://elk-elasticsearch-es-http.elk.svc:9200
+            - name: ElasticApm__ServerUrls
+              value: http://elk-apm-server-apm-http.elk.svc:8200
+
+            
+
+            
+            
+            
+  
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: release-name-reports
+spec:
+  maxReplicas: 4
+  minReplicas: 1
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: release-name-reports
+  metrics:
+      - type: Resource
+        resource:
+          name: memory
+          target:
+            type: Utilization
+            averageUtilization: 95
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:
+    release-name-reports
+  labels:
+    app:
+      release-name-reports
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app:
+        release-name-reports
+  template:
+    metadata:
+      labels:
+        app:
+          release-name-reports
+    spec:
+      
+
+      volumes:
+        - name: logs
+          persistentVolumeClaim:
+            claimName: release-name-pvc
+
+          
+          
+      nodeSelector:
+        kubernetes.io/os: linux
+        app: microservices
+      
+      containers:
+        - name:
+            release-name-reports
+          volumeMounts:
+              - name: logs
+                mountPath: /tmp_logs
+
+
+                
+                
+          image: viberegistry.azurecr.io/ems.reports:22283
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          liveness:
+            path: /hc
+            initialDelaySeconds: 10
+            failureThreshold: 3
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+        readiness:
+          path: /hc
+          initialDelaySeconds: 10
+          failureThreshold: 1
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 10
+          startup:
+            path: /hc
+            initialDelaySeconds: 30
+            failureThreshold: 20
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+
+          env:
+            - name: elastic__password
+              valueFrom:
+                secretKeyRef:
+                  key: elastic
+                  name: elk-elasticsearch-es-elastic-user
+            - name: ElasticApm__SecretToken
+              valueFrom:
+                secretKeyRef:
+                  key: secret-token
+                  name: elk-apm-server-apm-token
+            - name: elastic__username
+              value: elastic
+            - name: elastic__uri
+              value: http://elk-elasticsearch-es-http.elk.svc:9200
+            - name: ElasticApm__ServerUrls
+              value: http://elk-apm-server-apm-http.elk.svc:8200
+
+            
+            - name: AppSettings__TableauEnvironment
+              value: "test"
+            
+
+            
+            
+            
+  
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: release-name-security
+spec:
+  maxReplicas: 4
+  minReplicas: 1
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: release-name-security
+  metrics:
+      - type: Resource
+        resource:
+          name: memory
+          target:
+            type: Utilization
+            averageUtilization: 95
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:
+    release-name-security
+  labels:
+    app:
+      release-name-security
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app:
+        release-name-security
+  template:
+    metadata:
+      labels:
+        app:
+          release-name-security
+    spec:
+      
+
+      volumes:
+        - name: logs
+          persistentVolumeClaim:
+            claimName: release-name-pvc
+
+          
+          
+      nodeSelector:
+        kubernetes.io/os: linux
+        app: microservices
+      
+      containers:
+        - name:
+            release-name-security
+          volumeMounts:
+              - name: logs
+                mountPath: /tmp_logs
+
+
+                
+                
+          image: viberegistry.azurecr.io/ems.security:22274
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          liveness:
+            path: /hc
+            initialDelaySeconds: 10
+            failureThreshold: 3
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+        readiness:
+          path: /hc
+          initialDelaySeconds: 10
+          failureThreshold: 1
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 10
+          startup:
+            path: /hc
+            initialDelaySeconds: 30
+            failureThreshold: 20
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+
+          env:
+            - name: elastic__password
+              valueFrom:
+                secretKeyRef:
+                  key: elastic
+                  name: elk-elasticsearch-es-elastic-user
+            - name: ElasticApm__SecretToken
+              valueFrom:
+                secretKeyRef:
+                  key: secret-token
+                  name: elk-apm-server-apm-token
+            - name: elastic__username
+              value: elastic
+            - name: elastic__uri
+              value: http://elk-elasticsearch-es-http.elk.svc:9200
+            - name: ElasticApm__ServerUrls
+              value: http://elk-apm-server-apm-http.elk.svc:8200
+
+            
+            - name: APIBaseUrl
+              value: "https://alamedacounty.vibe-ems.app/"
+            
+
+            
+            
+            
+  
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: release-name-system-configuration
+spec:
+  maxReplicas: 4
+  minReplicas: 1
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: release-name-system-configuration
+  metrics:
+      - type: Resource
+        resource:
+          name: memory
+          target:
+            type: Utilization
+            averageUtilization: 95
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:
+    release-name-system-configuration
+  labels:
+    app:
+      release-name-system-configuration
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app:
+        release-name-system-configuration
+  template:
+    metadata:
+      labels:
+        app:
+          release-name-system-configuration
+    spec:
+      
+
+      volumes:
+        - name: logs
+          persistentVolumeClaim:
+            claimName: release-name-pvc
+
+          
+          
+      nodeSelector:
+        kubernetes.io/os: linux
+        app: microservices
+      
+      containers:
+        - name:
+            release-name-system-configuration
+          volumeMounts:
+              - name: logs
+                mountPath: /tmp_logs
+
+
+                
+                
+          image: viberegistry.azurecr.io/ems.systemconfiguration:22275
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          liveness:
+            path: /hc
+            initialDelaySeconds: 10
+            failureThreshold: 3
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+        readiness:
+          path: /hc
+          initialDelaySeconds: 10
+          failureThreshold: 1
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 10
+          startup:
+            path: /hc
+            initialDelaySeconds: 30
+            failureThreshold: 20
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+
+          env:
+            - name: elastic__password
+              valueFrom:
+                secretKeyRef:
+                  key: elastic
+                  name: elk-elasticsearch-es-elastic-user
+            - name: ElasticApm__SecretToken
+              valueFrom:
+                secretKeyRef:
+                  key: secret-token
+                  name: elk-apm-server-apm-token
+            - name: elastic__username
+              value: elastic
+            - name: elastic__uri
+              value: http://elk-elasticsearch-es-http.elk.svc:9200
+            - name: ElasticApm__ServerUrls
+              value: http://elk-apm-server-apm-http.elk.svc:8200
+
+            
+
+            
+            
+            
+  
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: release-name-versioning
+spec:
+  maxReplicas: 4
+  minReplicas: 1
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: release-name-versioning
+  metrics:
+      - type: Resource
+        resource:
+          name: memory
+          target:
+            type: Utilization
+            averageUtilization: 95
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:
+    release-name-versioning
+  labels:
+    app:
+      release-name-versioning
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app:
+        release-name-versioning
+  template:
+    metadata:
+      labels:
+        app:
+          release-name-versioning
+    spec:
+      
+
+      volumes:
+        - name: logs
+          persistentVolumeClaim:
+            claimName: release-name-pvc
+
+          
+          
+      nodeSelector:
+        kubernetes.io/os: linux
+        app: microservices
+      
+      containers:
+        - name:
+            release-name-versioning
+          volumeMounts:
+              - name: logs
+                mountPath: /tmp_logs
+
+
+                
+                
+          image: viberegistry.azurecr.io/ems.versionservice:22276
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          liveness:
+            path: /hc
+            initialDelaySeconds: 10
+            failureThreshold: 3
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+        readiness:
+          path: /hc
+          initialDelaySeconds: 10
+          failureThreshold: 1
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 10
+          startup:
+            path: /hc
+            initialDelaySeconds: 30
+            failureThreshold: 20
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+
+          env:
+            - name: elastic__password
+              valueFrom:
+                secretKeyRef:
+                  key: elastic
+                  name: elk-elasticsearch-es-elastic-user
+            - name: ElasticApm__SecretToken
+              valueFrom:
+                secretKeyRef:
+                  key: secret-token
+                  name: elk-apm-server-apm-token
+            - name: elastic__username
+              value: elastic
+            - name: elastic__uri
+              value: http://elk-elasticsearch-es-http.elk.svc:9200
+            - name: ElasticApm__ServerUrls
+              value: http://elk-apm-server-apm-http.elk.svc:8200
+
+            
+
+            
+            
+            
+  
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: release-name-vip-integration
+spec:
+  maxReplicas: 4
+  minReplicas: 1
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: release-name-vip-integration
+  metrics:
+      - type: Resource
+        resource:
+          name: memory
+          target:
+            type: Utilization
+            averageUtilization: 95
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:
+    release-name-vip-integration
+  labels:
+    app:
+      release-name-vip-integration
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app:
+        release-name-vip-integration
+  template:
+    metadata:
+      labels:
+        app:
+          release-name-vip-integration
+    spec:
+      
+
+      volumes:
+        - name: logs
+          persistentVolumeClaim:
+            claimName: release-name-pvc
+
+          
+          
+      nodeSelector:
+        kubernetes.io/os: linux
+        app: microservices
+      
+      containers:
+        - name:
+            release-name-vip-integration
+          volumeMounts:
+              - name: logs
+                mountPath: /tmp_logs
+
+
+                
+                
+          image: viberegistry.azurecr.io/ems.vipintegrationservices:21990
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          liveness:
+            path: /hc
+            initialDelaySeconds: 10
+            failureThreshold: 3
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+        readiness:
+          path: /hc
+          initialDelaySeconds: 10
+          failureThreshold: 1
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 10
+          startup:
+            path: /hc
+            initialDelaySeconds: 30
+            failureThreshold: 20
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+
+          env:
+            - name: elastic__password
+              valueFrom:
+                secretKeyRef:
+                  key: elastic
+                  name: elk-elasticsearch-es-elastic-user
+            - name: ElasticApm__SecretToken
+              valueFrom:
+                secretKeyRef:
+                  key: secret-token
+                  name: elk-apm-server-apm-token
+            - name: elastic__username
+              value: elastic
+            - name: elastic__uri
+              value: http://elk-elasticsearch-es-http.elk.svc:9200
+            - name: ElasticApm__ServerUrls
+              value: http://elk-apm-server-apm-http.elk.svc:8200
+
+            
+
+            
+            
+            
+  
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: release-name-voter
+spec:
+  maxReplicas: 4
+  minReplicas: 1
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: release-name-voter
+  metrics:
+      - type: Resource
+        resource:
+          name: memory
+          target:
+            type: Utilization
+            averageUtilization: 95
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:
+    release-name-voter
+  labels:
+    app:
+      release-name-voter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app:
+        release-name-voter
+  template:
+    metadata:
+      labels:
+        app:
+          release-name-voter
+    spec:
+      
+
+      volumes:
+        - name: logs
+          persistentVolumeClaim:
+            claimName: release-name-pvc
+
+          
+          
+      nodeSelector:
+        kubernetes.io/os: linux
+        app: microservices
+      
+      containers:
+        - name:
+            release-name-voter
+          volumeMounts:
+              - name: logs
+                mountPath: /tmp_logs
+
+
+                
+                
+          image: viberegistry.azurecr.io/ems.voter:22277
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          liveness:
+            path: /hc
+            initialDelaySeconds: 10
+            failureThreshold: 3
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+        readiness:
+          path: /hc
+          initialDelaySeconds: 10
+          failureThreshold: 1
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 10
+          startup:
+            path: /hc
+            initialDelaySeconds: 30
+            failureThreshold: 20
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+
+          env:
+            - name: elastic__password
+              valueFrom:
+                secretKeyRef:
+                  key: elastic
+                  name: elk-elasticsearch-es-elastic-user
+            - name: ElasticApm__SecretToken
+              valueFrom:
+                secretKeyRef:
+                  key: secret-token
+                  name: elk-apm-server-apm-token
+            - name: elastic__username
+              value: elastic
+            - name: elastic__uri
+              value: http://elk-elasticsearch-es-http.elk.svc:9200
+            - name: ElasticApm__ServerUrls
+              value: http://elk-apm-server-apm-http.elk.svc:8200
+
+            
+
+            
+            
+            
+  
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: release-name-worker
+spec:
+  maxReplicas: 4
+  minReplicas: 1
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: release-name-worker
+  metrics:
+      - type: Resource
+        resource:
+          name: memory
+          target:
+            type: Utilization
+            averageUtilization: 95
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:
+    release-name-worker
+  labels:
+    app:
+      release-name-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app:
+        release-name-worker
+  template:
+    metadata:
+      labels:
+        app:
+          release-name-worker
+    spec:
+      
+
+      volumes:
+        - name: logs
+          persistentVolumeClaim:
+            claimName: release-name-pvc
+
+          
+          
+      nodeSelector:
+        kubernetes.io/os: linux
+        app: microservices
+      
+      containers:
+        - name:
+            release-name-worker
+          volumeMounts:
+              - name: logs
+                mountPath: /tmp_logs
+
+
+                
+                
+          image: viberegistry.azurecr.io/ems.electionworker:22286
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          liveness:
+            path: /hc
+            initialDelaySeconds: 10
+            failureThreshold: 3
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+        readiness:
+          path: /hc
+          initialDelaySeconds: 10
+          failureThreshold: 1
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 10
+          startup:
+            path: /hc
+            initialDelaySeconds: 30
+            failureThreshold: 20
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+
+          env:
+            - name: elastic__password
+              valueFrom:
+                secretKeyRef:
+                  key: elastic
+                  name: elk-elasticsearch-es-elastic-user
+            - name: ElasticApm__SecretToken
+              valueFrom:
+                secretKeyRef:
+                  key: secret-token
+                  name: elk-apm-server-apm-token
+            - name: elastic__username
+              value: elastic
+            - name: elastic__uri
+              value: http://elk-elasticsearch-es-http.elk.svc:9200
+            - name: ElasticApm__ServerUrls
+              value: http://elk-apm-server-apm-http.elk.svc:8200
+
+            
+
+            
+            
+            
+  
+---
+# Source: project/templates/hook.yaml
+
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: release-name-hook
+  annotations:
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook": "pre-install,pre-delete,post-delete,post-install"
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: release-name-hook
+  annotations:
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook": "pre-install,pre-delete,post-delete"
+subjects:
+  - kind: ServiceAccount
+    name: release-name-hook
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "release-namepre-validation"
+  annotations:
+    "helm.sh/hook": "pre-install"
+
+    "helm.sh/hook-delete-policy": "hook-succeeded,hook-failed"
+spec:
+  activeDeadlineSeconds: 40
+  backoffLimit: 1
+  template:
+    metadata:
+      name: "release-namepre-validation"
+    spec:
+      
+      serviceAccountName: release-name-hook
+      restartPolicy: Never
+      containers:
+        - name: pre-install-job
+          image:  viberegistry.azurecr.io/kubectl:latest
+
+          command:
+            - sh
+            - -c
+            - |
+              RELEASE_NAME=elk
+              RELEASE_NAMESPACE=elk
+
+              if helm status $RELEASE_NAME -n $RELEASE_NAMESPACE | grep -q "STATUS: deployed"; then
+                echo "The release $RELEASE_NAME ran successfully."
+
+              else
+                echo "ERROR: The release $RELEASE_NAME ran with error."
+                helm status $RELEASE_NAME
+                exit 1
+              fi
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "release-namepre"
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-delete-policy": "hook-succeeded,hook-failed"
+spec:
+  activeDeadlineSeconds: 60
+  backoffLimit: 1
+  template:
+    metadata:
+      name: "release-namepre"
+    spec:
+      serviceAccountName: release-name-hook
+      restartPolicy: Never
+      containers:
+        - name: pre-install-job
+          image: bitnami/kubectl
+          command:
+            - sh
+            - -c
+            - |
+              kubectl get pods -A
+              kubectl get secret elk-elasticsearch-es-elastic-user \
+                  -n elk  \
+                  -ojson \
+                  | jq 'del(.metadata.namespace,.metadata.resourceVersion,.metadata.uid) | .metadata.creationTimestamp=null' \
+                  | kubectl apply --namespace=default -f -
+
+              kubectl get secret elk-elasticsearch-es-http-certs-public \
+                  -n elk  \
+                  -ojson \
+                  | jq 'del(.metadata.namespace,.metadata.resourceVersion,.metadata.uid) | .metadata.creationTimestamp=null' \
+                  | kubectl apply --namespace=default -f -
+
+
+              kubectl get secret elk-apm-server-apm-token \
+                  -n elk  \
+                  -ojson \
+                  | jq 'del(.metadata.namespace,.metadata.resourceVersion,.metadata.uid) | .metadata.creationTimestamp=null' \
+                  | kubectl apply --namespace=default -f -
+
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "release-namepredelete"
+  annotations:
+    "helm.sh/hook": "pre-delete"
+    "helm.sh/hook-delete-policy": "hook-succeeded,hook-failed"
+spec:
+  activeDeadlineSeconds: 60
+  backoffLimit: 1
+  template:
+
+    metadata:
+      name: "release-namepredelete"
+    spec:
+
+      serviceAccountName: release-name-hook
+      restartPolicy: Never
+      containers:
+        - name: pre-install-job
+          image: bitnami/kubectl
+          command:
+            - sh
+            - -c
+            - |
+              kubectl get pods -A
+              kubectl delete secret elk-elasticsearch-es-elastic-user -n default
+              kubectl delete secret elk-apm-server-apm-token -n default
+              kubectl delete secret elk-elasticsearch-es-http-certs-public -n default
+
+---
+# Source: project/templates/frontendService.yaml
+
+  
+  
+apiVersion: v1
+kind: Service
+metadata:
+  name: release-name
+spec:
+  selector:
+    app: release-name
+  ports:
+    - port: 80
+      
+      targetPort: 80
+      
+  type: ClusterIP
+  
+
+---
+  
+    
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-release-name-0
+spec:
+  selector:
+    app: frontend-release-name-0
+  ports:
+    - port: 80
+      
+      targetPort: 80
+      
+  type: ClusterIP
+---
+
+
+
+---
+# Source: project/templates/VirtualService.yaml
+
+  
+  
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: release-name
+spec:
+  hosts:
+    
+  gateways:
+    - 
+  http:
+    
+    
+    - match:
+        - uri:
+            prefix: /api/election
+        - uri:
+            prefix: /api
+        - uri:
+            prefix: /value
+
+      route:
+        - destination:
+            host: release-name-election.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/engine-rule
+
+      route:
+        - destination:
+            host: release-name-engine-rule.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/geo-data
+
+      route:
+        - destination:
+            host: release-name-geo-data.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/identity
+
+      route:
+        - destination:
+            host: release-name-identity.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/integration-services
+
+      route:
+        - destination:
+            host: release-name-integration-services.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/job-manager
+
+      route:
+        - destination:
+            host: release-name-job-manager.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/list-maintenance
+
+      route:
+        - destination:
+            host: release-name-list-maintenance.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/location
+
+      route:
+        - destination:
+            host: release-name-location.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/mailing
+
+      route:
+        - destination:
+            host: release-name-mailing.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/notifications
+
+      route:
+        - destination:
+            host: release-name-notifications.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/petition
+
+      route:
+        - destination:
+            host: release-name-petition.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/reports
+
+      route:
+        - destination:
+            host: release-name-reports.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/security
+
+      route:
+        - destination:
+            host: release-name-security.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/system-configuration
+
+      route:
+        - destination:
+            host: release-name-system-configuration.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/versioning
+
+      route:
+        - destination:
+            host: release-name-versioning.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/vip-integration
+
+      route:
+        - destination:
+            host: release-name-vip-integration.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/voter
+
+      route:
+        - destination:
+            host: release-name-voter.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/worker
+
+      route:
+        - destination:
+            host: release-name-worker.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    
+    - route:
+        - destination:
+            port:
+              number: 80
+            host: release-name
+    
+  
+---
+    
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: release-name-0
+spec:
+  hosts:
+    
+    - eday-alpinecounty.vibe-ems.app
+  
+  gateways:
+    - 
+  http:
+    
+    
+    - match:
+        - uri:
+            prefix: /api/election
+        - uri:
+            prefix: /api
+        - uri:
+            prefix: /value
+
+      route:
+        - destination:
+            host: release-name-election.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/engine-rule
+
+      route:
+        - destination:
+            host: release-name-engine-rule.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/geo-data
+
+      route:
+        - destination:
+            host: release-name-geo-data.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/identity
+
+      route:
+        - destination:
+            host: release-name-identity.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/integration-services
+
+      route:
+        - destination:
+            host: release-name-integration-services.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/job-manager
+
+      route:
+        - destination:
+            host: release-name-job-manager.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/list-maintenance
+
+      route:
+        - destination:
+            host: release-name-list-maintenance.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/location
+
+      route:
+        - destination:
+            host: release-name-location.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/mailing
+
+      route:
+        - destination:
+            host: release-name-mailing.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/notifications
+
+      route:
+        - destination:
+            host: release-name-notifications.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/petition
+
+      route:
+        - destination:
+            host: release-name-petition.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/reports
+
+      route:
+        - destination:
+            host: release-name-reports.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/security
+
+      route:
+        - destination:
+            host: release-name-security.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/system-configuration
+
+      route:
+        - destination:
+            host: release-name-system-configuration.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/versioning
+
+      route:
+        - destination:
+            host: release-name-versioning.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/vip-integration
+
+      route:
+        - destination:
+            host: release-name-vip-integration.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/voter
+
+      route:
+        - destination:
+            host: release-name-voter.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    - match:
+        - uri:
+            prefix: /api/worker
+
+      route:
+        - destination:
+            host: release-name-worker.default.svc.cluster.local
+            port:
+              
+              number: 80
+        
+    
+    
+    - route:
+        - destination:
+            port:
+              number: 80
+            host: frontend-release-name-0
+
+---
+
+
+---
+# Source: project/templates/volumen.logs.yaml
+
+  
+
+---
+apiVersion: v1
+data:
+  azurestorageaccountkey: secret
+  azurestorageaccountname: secret
+kind: Secret
+metadata:
+  name: release-name-logs-secret
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  annotations:
+    pv.kubernetes.io/provisioned-by: file.csi.azure.com
+  name: release-name-pv-default
+spec:
+  capacity:
+    storage: 100Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: azurefile-csi
+  csi:
+    driver: file.csi.azure.com
+    readOnly: false
+    volumeHandle: release-name-default-pv  # make sure this volumeid is unique for every identical share in the clustera
+
+    volumeAttributes:
+      shareName: qalogs
+    nodeStageSecretRef:
+      name: release-name-logs-secret
+      namespace: default
+  mountOptions:
+    - dir_mode=0777
+    - file_mode=0777
+    - uid=0
+    - gid=0
+    - mfsymlinks
+    - cache=strict
+    - nosharesock
+    - nobrl
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: release-name-pvc
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: azurefile-csi
+  volumeName: release-name-pv-default
+  resources:
+    requests:
+      storage: 99Gi
+
+---
+# Source: project/templates/filebeat.yaml
+
+  
+apiVersion: beat.k8s.elastic.co/v1beta1
+kind: Beat
+metadata:
+  name: release-name-filebeat
+spec:
+  type: filebeat
+  version: 7.17.9
+  elasticsearchRef:
+    name: elk-elasticsearch
+    namespace: elk
+  kibanaRef:
+    name: elk-kibana
+    namespace: elk
+  config:
+    filebeat.inputs:
+      - type: filestream
+        paths: /tmp_logs/**/*
+        parsers:
+          - ndjson:
+            overwrite_keys: true
+            add_error_key: true
+            expand_keys: true
+  deployment:
+    podTemplate:
+      spec:
+        securityContext:
+          runAsUser: 0
+        containers:
+          - name: filebeat
+            volumeMounts:
+              - name: logs
+                mountPath: /tmp_logs
+        volumes:
+          - name: logs
+            persistentVolumeClaim:
+              claimName: release-name-pvc
+---
+# Source: project/templates/backendService.yaml
+
+  
+  
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name:
+    release-name-election
+spec:
+  selector:
+    app:
+      release-name-election
+  ports:
+    - port: 80
+      
+      targetPort: 80
+  
+  type: ClusterIP
+  
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name:
+    release-name-engine-rule
+spec:
+  selector:
+    app:
+      release-name-engine-rule
+  ports:
+    - port: 80
+      
+      targetPort: 80
+  
+  type: ClusterIP
+  
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name:
+    release-name-geo-data
+spec:
+  selector:
+    app:
+      release-name-geo-data
+  ports:
+    - port: 80
+      
+      targetPort: 80
+  
+  type: ClusterIP
+  
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name:
+    release-name-identity
+spec:
+  selector:
+    app:
+      release-name-identity
+  ports:
+    - port: 80
+      
+      targetPort: 80
+  
+  type: ClusterIP
+  
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name:
+    release-name-integration-services
+spec:
+  selector:
+    app:
+      release-name-integration-services
+  ports:
+    - port: 80
+      
+      targetPort: 80
+  
+  type: ClusterIP
+  
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name:
+    release-name-job-manager
+spec:
+  selector:
+    app:
+      release-name-job-manager
+  ports:
+    - port: 80
+      
+      targetPort: 80
+  
+  type: ClusterIP
+  
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name:
+    release-name-list-maintenance
+spec:
+  selector:
+    app:
+      release-name-list-maintenance
+  ports:
+    - port: 80
+      
+      targetPort: 80
+  
+  type: ClusterIP
+  
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name:
+    release-name-location
+spec:
+  selector:
+    app:
+      release-name-location
+  ports:
+    - port: 80
+      
+      targetPort: 80
+  
+  type: ClusterIP
+  
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name:
+    release-name-mailing
+spec:
+  selector:
+    app:
+      release-name-mailing
+  ports:
+    - port: 80
+      
+      targetPort: 80
+  
+  type: ClusterIP
+  
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name:
+    release-name-notifications
+spec:
+  selector:
+    app:
+      release-name-notifications
+  ports:
+    - port: 80
+      
+      targetPort: 80
+  
+  type: ClusterIP
+  
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name:
+    release-name-petition
+spec:
+  selector:
+    app:
+      release-name-petition
+  ports:
+    - port: 80
+      
+      targetPort: 80
+  
+  type: ClusterIP
+  
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name:
+    release-name-reports
+spec:
+  selector:
+    app:
+      release-name-reports
+  ports:
+    - port: 80
+      
+      targetPort: 80
+  
+  type: ClusterIP
+  
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name:
+    release-name-security
+spec:
+  selector:
+    app:
+      release-name-security
+  ports:
+    - port: 80
+      
+      targetPort: 80
+  
+  type: ClusterIP
+  
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name:
+    release-name-system-configuration
+spec:
+  selector:
+    app:
+      release-name-system-configuration
+  ports:
+    - port: 80
+      
+      targetPort: 80
+  
+  type: ClusterIP
+  
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name:
+    release-name-versioning
+spec:
+  selector:
+    app:
+      release-name-versioning
+  ports:
+    - port: 80
+      
+      targetPort: 80
+  
+  type: ClusterIP
+  
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name:
+    release-name-vip-integration
+spec:
+  selector:
+    app:
+      release-name-vip-integration
+  ports:
+    - port: 80
+      
+      targetPort: 80
+  
+  type: ClusterIP
+  
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name:
+    release-name-voter
+spec:
+  selector:
+    app:
+      release-name-voter
+  ports:
+    - port: 80
+      
+      targetPort: 80
+  
+  type: ClusterIP
+  
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name:
+    release-name-worker
+spec:
+  selector:
+    app:
+      release-name-worker
+  ports:
+    - port: 80
+      
+      targetPort: 80
+  
+  type: ClusterIP
+  
+
+---
+# Source: project/templates/secret.yaml
+
+  
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: release-name-ca-certs
+type: Opaque
+data:
+  
+  ems.crt: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUc1akNDQmM2Z0F3SUJBZ0lRZHhxc3RYZnZUa0gyVnBQNzExSjVEREFOQmdrcWhraUc5dzBCQVFzRkFEQ0IKbFRFTE1Ba0dBMVVFQmhNQ1IwSXhHekFaQmdOVkJBZ1RFa2R5WldGMFpYSWdUV0Z1WTJobGMzUmxjakVRTUE0RwpBMVVFQnhNSFUyRnNabTl5WkRFWU1CWUdBMVVFQ2hNUFUyVmpkR2xuYnlCTWFXMXBkR1ZrTVQwd093WURWUVFECkV6UlRaV04wYVdkdklGSlRRU0JQY21kaGJtbDZZWFJwYjI0Z1ZtRnNhV1JoZEdsdmJpQlRaV04xY21VZ1UyVnkKZG1WeUlFTkJNQjRYRFRJeU1EY3lNREF3TURBd01Gb1hEVEl6TURjeU1ESXpOVGsxT1Zvd1l6RUxNQWtHQTFVRQpCaE1DVlZNeEV6QVJCZ05WQkFnVENrTmhiR2xtYjNKdWFXRXhKakFrQmdOVkJBb1RIVkJ5YjNacGMzUmhJRk52ClpuUjNZWEpsSUVOdmNuQnZjbUYwYVc5dU1SY3dGUVlEVlFRRERBNHFMblpwWW1VdFpXMXpMbUZ3Y0RDQ0FTSXcKRFFZSktvWklodmNOQVFFQkJRQURnZ0VQQURDQ0FRb0NnZ0VCQUxIZlN2M2ZZMWhiODAvT28yaWZseGZ3TWJpMQpXM1VFK09BeTZMYnJER09QMjNTbEROYlRncXNSUFJwUU4zVjhmdEhGT3I4Y1cvaGo3bWdDNmI2UDlBb2F2eFN2CitSSkpmVEdIYXpoMXk4cEZuSEVUS29PL3hlVyt1SWorMDJBUjYrK25XTTNOM3dFdWx4aSs5TmlkK3Mydjh4M1kKbHUxdkJNaEN3TzVJMjQrV0pUcnhYamcxUTVSTUtrblQ3akFBeWhSbkg2L1NzWkpGQlRDaFpUS2F6TFd5cmt2NwpHVjBvQlFvMllRMzJPNmdhNUp0SXlOSFJCeGNPcEJPRmNLQk9OUmlzMGlDckNScnNhZmxwYUFLNnpOQXJidFVIClJZamhvbFdvdGRRSGlHaGFOUVh0UlNLRlRoYkg5ZGgwRFQ3Qk0rUGhSNis5ZVVmR1NUazdxVURuREs4Q0F3RUEKQWFPQ0EyRXdnZ05kTUI4R0ExVWRJd1FZTUJhQUZCZloxaVVuWi9reHdrbEQyVEEyUkl4c3FVL3JNQjBHQTFVZApEZ1FXQkJUY3ZxeEtZbGUzR09Jb1FwUG5NbzEvWFFtQkhEQU9CZ05WSFE4QkFmOEVCQU1DQmFBd0RBWURWUjBUCkFRSC9CQUl3QURBZEJnTlZIU1VFRmpBVUJnZ3JCZ0VGQlFjREFRWUlLd1lCQlFVSEF3SXdTZ1lEVlIwZ0JFTXcKUVRBMUJnd3JCZ0VFQWJJeEFRSUJBd1F3SlRBakJnZ3JCZ0VGQlFjQ0FSWVhhSFIwY0hNNkx5OXpaV04wYVdkdgpMbU52YlM5RFVGTXdDQVlHWjRFTUFRSUNNRm9HQTFVZEh3UlRNRkV3VDZCTm9FdUdTV2gwZEhBNkx5OWpjbXd1CmMyVmpkR2xuYnk1amIyMHZVMlZqZEdsbmIxSlRRVTl5WjJGdWFYcGhkR2x2YmxaaGJHbGtZWFJwYjI1VFpXTjEKY21WVFpYSjJaWEpEUVM1amNtd3dnWW9HQ0NzR0FRVUZCd0VCQkg0d2ZEQlZCZ2dyQmdFRkJRY3dBb1pKYUhSMApjRG92TDJOeWRDNXpaV04wYVdkdkxtTnZiUzlUWldOMGFXZHZVbE5CVDNKbllXNXBlbUYwYVc5dVZtRnNhV1JoCmRHbHZibE5sWTNWeVpWTmxjblpsY2tOQkxtTnlkREFqQmdnckJnRUZCUWN3QVlZWGFIUjBjRG92TDI5amMzQXUKYzJWamRHbG5ieTVqYjIwd0p3WURWUjBSQkNBd0hvSU9LaTUyYVdKbExXVnRjeTVoY0hDQ0RIWnBZbVV0WlcxegpMbUZ3Y0RDQ0FYNEdDaXNHQVFRQjFua0NCQUlFZ2dGdUJJSUJhZ0ZvQUhZQXJmZSsrbnovRU1pTG5UMmNIajRZCmFyUm5LVjNQc1F3a3lvV0dOT3ZjZ29vQUFBR0NHeWRjZ1FBQUJBTUFSekJGQWlCakN0MDZOWGdWbVlaUjB0Q0IKeExjZndXeE91cDlzanlMcXZFNjVLbG00a3dJaEFQbWx1b2ZkSytYMkxrQXVsZXB3Yk9ibkx1dHh5YmtQZCtlTQp3K0daVThndEFIWUFlaktNVk5pM0xiWWc2ampnVWg3cGhCWndNaE9GVFR2U0s4RTZWNk5TNjFJQUFBR0NHeWRjClh3QUFCQU1BUnpCRkFpQlIrQmFRQVd6dXY2ZXBWR1FJeHNROVFxcU9wbnRzS0lHaWRBTzdsY3Q0WWdJaEFMNUIKSjFHeVppMjUya1RXL3krSkEzMnJYUFg4NGNtdHJGUDRra1I2T2doaUFIWUE2RDdRMmo3MUJqVXk1MWNvdklscgp5UVBUeTlFUmErenJhZUYzZlcwR3ZXNEFBQUdDR3lkY0p3QUFCQU1BUnpCRkFpRUE1bjhHUXVQU3BxMk40V2oxCkg3Q3R3MVo0VmxiNkFmRlRvQllxTURRVm13MENJRVZQaUdtMXFSTUtDaGZpMVVKWkNwaC95NnZBeEF5YngrMFgKSEtya01FeGRNQTBHQ1NxR1NJYjNEUUVCQ3dVQUE0SUJBUUI3QnBpenc1M2x3Z0dGcitOUWxCZEF3SURIZytnWAp1K3VZU0tPUGxnZXhnNHAwc2dTZUZlaWF3cDNaUjVrYldEM0VmeUg1OXJMSTAveGhaa205RUc5UDdCdW1kai9rCkxmeU8zajRsUnBHNlBQSzJqUXV2K0JXajBsK2VqMXh2MTdpQWhWUjh0R2JSZWIwanJIY0dPWjMyZ2E5SXZvdEgKWXJHek5MeGJ5dFEwK082NnBKSjBqZGIxSVpDanVoSHl6U3V5dERranNZRXExRzVpQThQMzFLSlVFN1lVcyt1RwpXUEFHRUFHaGU5b1F2dGE4VDVLWllCODNhSkt2QmZlb2hGTGEwS3g1SzYvM0NwR2pMeG02N2RJQUpGMmMxU2dVCkRQak5nWURtWncxL0g3MkF5WFpnSFpXTFI4cVJkU3dLNHMyeWU3QVNZOWtHWHFaUHhsbDNKald6Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0=
+  
+
+---
+# Source: project/templates/frontend.yaml
+  
+  
+
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: release-name
+  labels:
+    app: release-name
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: release-name
+  template:
+    metadata:
+      labels:
+        app: release-name
+    spec:
+      
+      imagePullSecrets:
+        - name: vibe
+      
+      nodeSelector:
+        kubernetes.io/os: linux
+      containers:
+        - name: release-name
+          image: viberegistry.azurecr.io/ems.client:22280
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          livenessProbe:
+            path: /
+            initialDelaySeconds: 40
+            failureThreshold: 3
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+         
+          readinessProbe:
+            path: /
+            initialDelaySeconds: 40
+            failureThreshold: 1
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 10 
+
+          startupProbe:
+            path: /
+            initialDelaySeconds: 40
+            failureThreshold: 20
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+          
+          
+                 
+  
+---
+
+    
+    
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-release-name-0
+  labels:
+    app: frontend-release-name-0
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend-release-name-0
+  template:
+    metadata:
+      labels:
+        app: frontend-release-name-0
+    spec:
+      
+      imagePullSecrets:
+        - name: vibe
+      
+      nodeSelector:
+        kubernetes.io/os: linux
+      containers:
+        - name: frontend-release-name-0
+          image: viberegistry.azurecr.io/ems.client:22280
+          imagePullPolicy: 
+          ports:
+            - containerPort: 80
+          livenessProbe:
+            path: /
+            initialDelaySeconds: 40
+            failureThreshold: 3
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+         
+          readinessProbe:
+            path: /
+            initialDelaySeconds: 40
+            failureThreshold: 1
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 10
+
+          startupProbe:
+            path: /
+            initialDelaySeconds: 40
+            failureThreshold: 20
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+---
